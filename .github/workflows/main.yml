@@ -9,18 +9,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Show repository layout
-        run: ls -la . android android/app/src/main/assets/www 2>&1 | head -50
+        run: ls -la . albion-calc/android albion-calc/android/app/src/main/assets/www 2>&1 | head -50
       - name: Refresh bundled web app (only if web/ is in the repo)
         run: |
-          if [ -d web ]; then
-            rm -rf android/app/src/main/assets/www
-            mkdir -p android/app/src/main/assets/www
-            cp -r web/index.html web/css web/js web/data web/icons web/manifest.webmanifest android/app/src/main/assets/www/
+          if [ -d albion-calc/web ]; then
+            rm -rf albion-calc/android/app/src/main/assets/www
+            mkdir -p albion-calc/android/app/src/main/assets/www
+            cp -r albion-calc/web/index.html albion-calc/web/css albion-calc/web/js albion-calc/web/data albion-calc/web/icons albion-calc/web/manifest.webmanifest albion-calc/android/app/src/main/assets/www/
             echo "synced web -> android assets"
           else
-            echo "no web/ folder, using the copy already in android/app/src/main/assets/www"
+            echo "no web/ folder, using the copy already in albion-calc/android/app/src/main/assets/www"
           fi
-          test -f android/app/src/main/assets/www/index.html
+          test -f albion-calc/android/app/src/main/assets/www/index.html
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -28,8 +28,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: 8.7
-      - run: gradle -p android assembleDebug --no-daemon
+      - run: gradle -p albion-calc/android assembleDebug --no-daemon
       - uses: actions/upload-artifact@v4
         with:
           name: albion-calc-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: albion-calc/android/app/build/outputs/apk/debug/app-debug.apk
