@@ -20,10 +20,17 @@
 
   // ------------------------------------------------------------------ persistence
   const KEY = 'albion-calc.v1';
+  // Every launch starts clean: nothing is restored from earlier sessions. Set PERSIST to true to remember
+  // prices, filters and settings between launches again.
+  const PERSIST = false;
   const Store = {
     d: {},
-    load() { try { this.d = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { this.d = {}; } },
+    load() {
+      if (!PERSIST) { this.d = {}; try { localStorage.removeItem(KEY); } catch (e) {} return; }
+      try { this.d = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { this.d = {}; }
+    },
     save() {
+      if (!PERSIST) return;
       clearTimeout(this._t);
       this._t = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(this.d)); } catch (e) {} }, 250);
     },
@@ -34,8 +41,8 @@
 
   // global settings shared by every tool
   const defaults = {
-    server: 'east', premium: true, sellTaxes: true, buyTaxes: true,
-    focusEff: 0, mountCap: 25735,
+    server: '', premium: false, sellTaxes: false, buyTaxes: false,
+    focusEff: null, mountCap: null, buyBasis: '', sellBasis: '',
   };
   const S = Object.assign({}, defaults, Store.get('settings', {}));
   function saveSettings() { Store.set('settings', S); }
@@ -123,13 +130,15 @@
     const bf = buyFee();
     let matPerCraft = 0, missing = 0;
     const lines = rec.r.map(([id, count, nr]) => {
-      const p = c.priceOf(id);
+      const pr = c.priceOf(id);
+      const own = !!pr && typeof pr === 'object';          // { p, own:true } = an input you craft yourself (no buy fee)
+      const p = own ? pr.p : pr;
       if (p == null || p === 0) missing++;
-      const unit = (p || 0) * (1 + bf);
+      const unit = (p || 0) * (own ? 1 : 1 + bf);
       const eff = nr ? 1 : (1 - c.rrr);
       const cost = count * unit * eff;
       matPerCraft += cost;
-      return { id, count, nr, price: p, units: count * crafts, unitsEff: count * eff * crafts, cost: cost * crafts };
+      return { id, count, nr, own, eff, price: p, units: count * crafts, unitsEff: count * eff * crafts, cost: cost * crafts };
     });
     const feePerCraft = rec.v * NUTRITION_PER_VALUE * (c.feeRate || 0) / 100;
     const silverPerCraft = rec.si || 0;
@@ -163,7 +172,7 @@
   const MIN_GAP = 380;     // ms between requests (limit is ~180/min)
   const api = {
     _tail: Promise.resolve(), _last: 0, pending: 0,
-    host() { return SERVERS[S.server].host; },
+    host() { if (!SERVERS[S.server]) throw new Error('Select a server first (top right)'); return SERVERS[S.server].host; },
     _sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
     /** serialised, throttled GET returning parsed JSON */
     get(path, signal) {

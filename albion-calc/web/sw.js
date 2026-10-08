@@ -1,7 +1,7 @@
 /* Offline shell: cache the app files, never cache API calls. */
-const CACHE = 'albion-calc-v1';
+const CACHE = 'albion-calc-v3';
 const FILES = ['./', 'index.html', 'css/app.css', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
-  'data/names.js', 'data/recipes.js', 'data/meta.js', 'data/flip.js',
+  'data/names.js', 'data/recipes.js', 'data/meta.js', 'data/flip.js', 'data/journals.js', 'data/extras.js',
   'js/core.js', 'js/ui.js', 'js/common.js', 'js/app.js',
   'js/tools/flipper.js', 'js/tools/planner.js', 'js/tools/refining.js', 'js/tools/consumable.js'];
 

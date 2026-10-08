@@ -183,7 +183,7 @@ for uid, it in items.items():
     sc = it.get('@shopcategory')
     if sc not in FLIPCAT: continue
     tier = int(it.get('@tier', 0) or 0)
-    if tier < 4 or tier > 8: continue
+    if tier < 3 or tier > 8: continue
     if uid not in valid: continue
     cat = FLIPCAT[sc]
     lv = [(0, uid)]

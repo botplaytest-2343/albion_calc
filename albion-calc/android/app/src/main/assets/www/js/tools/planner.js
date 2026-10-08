@@ -6,13 +6,14 @@
 
   const saved = C.Store.get(KEY, {});
   const st = Object.assign({
-    items: [], buyCity: 'Fort Sterling', sellCity: 'Black Market', quality: 1, checked: {}, mount: '25735', wtab: 'in',
-    jBuy: 'Fort Sterling', jSell: 'Martlock', fameBonus: 0, fameMult: 1,
+    items: [], buyCity: '', sellCity: '', quality: '', checked: {}, mount: '', wtab: 'in',
+    jBuy: '', jSell: '', fameBonus: null, fameMult: null,
   }, saved);
-  st.prod = Object.assign(COM.prodDefaults({ location: 'Fort Sterling' }), saved.prod || {});
+  st.prod = Object.assign(COM.prodDefaults(), saved.prod || {});
   const save = () => C.Store.set(KEY, st);
-  const SELL_CITIES = C.MARKETS.concat(['Black Market']);
-  const MOUNTS = [['25735', 'Transport Mammoth (25,735 kg)'], ['custom', 'Custom capacity']];
+  const SELL_CITIES = U.blank(C.MARKETS.concat(['Black Market']), 'Select city');
+  const BUY_CITIES = U.blank(C.MARKETS, 'Select city');
+  const MOUNTS = U.blank([['25735', 'Transport Mammoth (25,735 kg)'], ['custom', 'Custom capacity']], 'Select mount');
 
   // ---------------------------------------------------------------- search index
   let index = null;
@@ -58,6 +59,7 @@
   }
 
   // ---------------------------------------------------------------- compute
+  const qtyOf = (it) => (it.qty > 0 ? it.qty : 1);      // empty box = a single craft
   function compute() {
     const out = st.items.map((it) => {
       const rec = C.recipeFor(it.id, it.alt) || C.recipeFor(it.id, 0);
@@ -65,7 +67,7 @@
       const rrr = it.rrr != null ? it.rrr / 100 : calcRrr;
       const fee = it.fee != null ? it.fee : st.prod.feeRate;
       const c = C.calcCraft(rec, {
-        rrr, focus: st.prod.focus, feeRate: fee, crafts: it.qty || 0,
+        rrr, focus: st.prod.focus, feeRate: fee, crafts: qtyOf(it),
         priceOf: (id) => C.book.buy[id], outPrice: C.book.sell[it.id],
       });
       const jr = journalOf(rec);
@@ -75,8 +77,8 @@
         const pe = C.book.buy[jr.empty], pf = C.book.sell[jr.full];
         if (pe > 0 && pf > 0) jProfit = jFilled * (pf * (1 - C.sellFee()) - pe * (1 + C.buyFee()));
       }
-      const fame = fameOneCraft(rec) * (it.qty || 0) * (C.S.premium ? 1.5 : 1) * (1 + (st.fameBonus || 0) / 100) * (st.fameMult || 1);
-      const nutrition = rec.v * C.NUTRITION * (it.qty || 0);
+      const fame = fameOneCraft(rec) * qtyOf(it) * (C.S.premium ? 1.5 : 1) * (1 + (st.fameBonus || 0) / 100) * (st.fameMult || 1);
+      const nutrition = rec.v * C.NUTRITION * qtyOf(it);
       return { it, rec, c, calcRrr, rrr, fee, jr, jFilled, jProfit, fame, nutrition };
     });
     const mats = new Map();
@@ -117,9 +119,9 @@
     P.out.forEach((o, i) => {
       const { it, rec, c } = o;
       const stepper = h('div', { class: 'stepper' },
-        h('button', { onclick: () => { it.qty = Math.max(0, (it.qty || 0) - 1); change(); } }, '−'),
-        U.num(() => it.qty, (n) => { it.qty = n == null ? 0 : Math.max(0, Math.floor(n)); save(); renderSoon(); }, { w: '60px', key: 'qty|' + i }),
-        h('button', { onclick: () => { it.qty = (it.qty || 0) + 1; change(); } }, '+'));
+        h('button', { onclick: () => { it.qty = Math.max(1, qtyOf(it) - 1); change(); } }, '−'),
+        U.num(() => it.qty, (n) => { it.qty = n == null ? null : Math.max(0, Math.floor(n)); save(); renderSoon(); }, { w: '60px', key: 'qty|' + i, ph: '1' }),
+        h('button', { onclick: () => { it.qty = qtyOf(it) + 1; change(); } }, '+'));
       const rrrIn = h('div', { class: 'row-inline' },
         U.num(() => it.rrr != null ? it.rrr : +(o.calcRrr * 100).toFixed(2), (n) => { it.rrr = n; save(); renderSoon(); }, { w: '70px', key: 'rrr|' + i }),
         it.rrr != null ? h('button', { class: 'xs', title: 'Back to calculated value', onclick: () => { delete it.rrr; change(); } }, '↺') : null);
@@ -152,7 +154,7 @@
             h('div', { class: 'dnum' }, h('b', { class: 'm' }, C.fmt(c.revenue), ' silver'), h('div', { class: 'seen' }, 'after ' + C.pct(C.sellFee(), 1) + ' fees'))),
           h('div', { class: 'dsec' }, 'Required materials'),
           c.lines.map((l) => h('div', { class: 'drow' },
-            U.itemCell(l.id, { size: 30, sub: C.fmt(l.count * (it.qty || 0)) + ' units' + (l.nr ? ' · not returned' : '') + ' · ' + C.fmt2(l.units * (window.AO.meta.wt[l.id] || 0)) + ' kg' }),
+            U.itemCell(l.id, { size: 30, sub: C.fmt(l.count * qtyOf(it)) + ' units' + (l.nr ? ' · not returned' : '') + ' · ' + C.fmt2(l.units * (window.AO.meta.wt[l.id] || 0)) + ' kg' }),
             U.priceInput('buy', l.id, render),
             h('div', { class: 'dnum' }, h('b', { class: 'm' }, C.fmt(l.cost), ' silver'), h('div', { class: 'seen' }, '≈ ' + C.fmt(Math.ceil(l.unitsEff)) + ' to buy'))))));
       }
@@ -195,8 +197,8 @@
   function renderFame(P) {
     U.clear(fameEl);
     fameEl.appendChild(h('div', { class: 'panel-grid' },
-      U.field('Fame bonus %', U.num(() => st.fameBonus, (n) => { st.fameBonus = n || 0; save(); renderSoon(); }, { w: '70px' }), 'Extra fame from events / bonuses.'),
-      U.field('Fame calibration ×', U.num(() => st.fameMult, (n) => { st.fameMult = n || 1; save(); renderSoon(); }, { w: '70px' }),
+      U.field('Fame bonus %', U.num(() => st.fameBonus, (n) => { st.fameBonus = n; save(); renderSoon(); }, { w: '70px', ph: '0' }), 'Extra fame from events / bonuses.'),
+      U.field('Fame calibration ×', U.num(() => st.fameMult, (n) => { st.fameMult = n; save(); renderSoon(); }, { w: '70px', ph: '1' }),
         'Crafting fame is an estimate (the game files do not contain exact values). Multiply by your in-game / observed ratio if it is off.')));
     P.out.forEach((o) => fameEl.appendChild(h('div', { class: 'orow' }, U.itemCell(o.it.id, { size: 28, sub: C.fmt(o.c.items) + ' items' }), h('span', { class: 'm' }, C.fmt(o.fame) + ' fame'))));
     fameEl.appendChild(h('div', { class: 'tot' }, h('span', null, 'Total crafting fame' + (C.S.premium ? ' (premium +50%)' : '')), h('b', { class: 'm' }, C.fmt(P.fame))));
@@ -204,23 +206,23 @@
 
   function renderWeight(P) {
     U.clear(wtEl);
-    const cap = st.mount === 'custom' ? (C.S.mountCap || 0) : +st.mount;
+    const cap = st.mount === 'custom' ? (C.S.mountCap || 0) : (+st.mount || 0);
     const w = st.wtab === 'in' ? P.wIn : P.wOut;
     const pctUsed = cap ? w / cap : 0;
     wtEl.appendChild(h('div', null,
       h('div', { class: 'panel-grid' }, U.field('Mount', U.select(MOUNTS, () => st.mount, (v) => { st.mount = v; change(); })),
-        st.mount === 'custom' ? U.field('Capacity (kg)', U.num(() => C.S.mountCap, (n) => { C.S.mountCap = n || 0; C.saveSettings(); renderSoon(); }, { w: '90px' })) : null),
+        st.mount === 'custom' ? U.field('Capacity (kg)', U.num(() => C.S.mountCap, (n) => { C.S.mountCap = n; C.saveSettings(); renderSoon(); }, { w: '90px' })) : null),
       h('div', { class: 'seg' },
         h('button', { class: st.wtab === 'in' ? 'on' : '', onclick: () => { st.wtab = 'in'; change(); } }, 'Input (' + C.fmt(P.wIn) + ' kg)'),
         h('button', { class: st.wtab === 'out' ? 'on' : '', onclick: () => { st.wtab = 'out'; change(); } }, 'Output (' + C.fmt(P.wOut) + ' kg)')),
       h('div', { class: 'wbar' }, h('div', { class: 'wfill' + (pctUsed > 1 ? ' over' : ''), style: { width: Math.min(100, pctUsed * 100) + '%' } })),
-      h('div', { class: 'seen' }, cap ? C.pct(pctUsed, 0) + ' used · ' + C.fmt(Math.max(0, cap - w)) + ' kg free · ' + Math.max(1, Math.ceil(pctUsed)) + ' trip(s)' : 'Set a capacity')));
+      h('div', { class: 'seen' }, cap ? C.pct(pctUsed, 0) + ' used · ' + C.fmt(Math.max(0, cap - w)) + ' kg free · ' + Math.max(1, Math.ceil(pctUsed)) + ' trip(s)' : 'Choose a mount or enter a capacity')));
   }
 
   // ---------------------------------------------------------------- controls
   const panel = COM.prodPanel(st.prod, change, { sample: () => sample });
   const picker = U.picker(search, (r) => {
-    st.items.push({ id: r.id, qty: 1, alt: 0, open: true });
+    st.items.push({ id: r.id, qty: null, alt: 0, open: true });
     change(); U.toast('Added ' + r.title + ' ' + r.sub.split(' ')[0]);
   }, { ph: 'Search any recipe (e.g. "bow t6.1", "plate armor", "pork pie")…' });
 
@@ -232,9 +234,9 @@
     return [
       { ids: [...mats], city: st.buyCity, side: 'buy', quality: 1 },
       { ids: [...prods], city: st.sellCity, side: 'sell', quality: st.quality },
-      { ids: [...je], city: st.jBuy, side: 'buy', quality: 1 },
-      { ids: [...jf], city: st.jSell, side: 'sell', quality: 1 },
-    ].filter((j) => j.ids.length);
+      { ids: [...je], city: st.jBuy, side: 'buy', quality: 1, opt: true },     // journals are optional: skipped until a city is chosen
+      { ids: [...jf], city: st.jSell, side: 'sell', quality: 1, opt: true },
+    ].filter((j) => j.ids.length && (j.city || !j.opt));
   };
   const fetchBar = COM.fetchBar(fetchJobs, render, {
     extra: U.btn('✕ Clear all', () => { if (st.items.length && confirm('Remove all recipes from the plan?')) { st.items = []; change(); } }, 'danger'),
@@ -254,11 +256,11 @@
     U.card('Crafting setup', panel),
     U.card('Prices',
       h('div', { class: 'panel-grid' },
-        U.field('Buy materials from', U.select(C.MARKETS, () => st.buyCity, (v) => { st.buyCity = v; change(); })),
+        U.field('Buy materials from', U.select(BUY_CITIES, () => st.buyCity, (v) => { st.buyCity = v; change(); })),
         U.field('Sell crafted items to', U.select(SELL_CITIES, () => st.sellCity, (v) => { st.sellCity = v; change(); })),
-        U.field('Product quality', U.select(C.QUALITIES.map((q, i) => [i + 1, q]), () => st.quality, (v) => { st.quality = +v; change(); })),
-        U.field('Buy empty journals from', U.select(C.MARKETS, () => st.jBuy, (v) => { st.jBuy = v; change(); })),
-        U.field('Sell full journals to', U.select(C.MARKETS, () => st.jSell, (v) => { st.jSell = v; change(); }))),
+        U.field('Product quality', U.select(U.blank(C.QUALITIES.map((q, i) => [i + 1, q]), 'Select quality'), () => st.quality, (v) => { st.quality = v ? +v : ''; change(); })),
+        U.field('Buy empty journals from', U.select(BUY_CITIES, () => st.jBuy, (v) => { st.jBuy = v; change(); })),
+        U.field('Sell full journals to', U.select(BUY_CITIES, () => st.jSell, (v) => { st.jSell = v; change(); }))),
       COM.basisPanel(change), fetchBar),
     h('div', { class: 'two' },
       h('div', { class: 'col' }, U.card('Selected recipes', listEl)),

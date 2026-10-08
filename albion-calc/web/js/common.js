@@ -9,8 +9,8 @@
   /** state shape created by prodDefaults() */
   function prodDefaults(over) {
     return Object.assign({
-      location: 'Fort Sterling', hideoutPb: 15, feeRate: 700, daily: 0,
-      production: true, focus: true, customOn: false, customRrr: 24.8,
+      location: '', hideoutPb: null, feeRate: null, daily: 0,
+      production: false, focus: false, customOn: false, customRrr: null,
     }, over || {});
   }
 
@@ -34,22 +34,22 @@
     const chg = () => { refresh(); onChange(); };
     const hideout = h('div', { class: 'fld', hidden: st.location !== 'Hideout' });
     hideout.appendChild(h('div', { class: 'fl' }, 'Hideout bonus %', h('span', { class: 'hint', title: 'Total production bonus of your hideout / island station, before focus' }, 'ⓘ')));
-    hideout.appendChild(U.num(() => st.hideoutPb, (n) => { st.hideoutPb = n || 0; chg(); }, { w: '80px' }));
+    hideout.appendChild(U.num(() => st.hideoutPb, (n) => { st.hideoutPb = n; chg(); }, { w: '80px', ph: '0' }));
 
     const root = h('div', { class: 'panel-grid' },
-      U.field('Location', U.select(LOCATIONS, () => st.location, (v) => { st.location = v; hideout.hidden = v !== 'Hideout'; chg(); }),
+      U.field('Location', U.select(U.blank(LOCATIONS, 'Select location'), () => st.location, (v) => { st.location = v; hideout.hidden = v !== 'Hideout'; chg(); }),
         'Base crafting bonus comes from your station. City specialty bonuses are read from the game data.'),
       hideout,
-      U.field('Usage fee (silver)', U.num(() => st.feeRate, (n) => { st.feeRate = n || 0; chg(); }, { w: '90px' }),
+      U.field('Usage fee (silver)', U.num(() => st.feeRate, (n) => { st.feeRate = n; chg(); }, { w: '90px', ph: '0' }),
         'The fee shown on the crafting station: silver per 100 nutrition.'),
       U.field('Daily bonus', U.select([[0, 'No daily bonus'], [0.1, '+10%'], [0.2, '+20%']], () => st.daily, (v) => { st.daily = +v; chg(); })),
       U.field('Calculated RRR', rrrBox, 'Resource return rate = 1 − 1 / (1 + production bonus)'),
       U.field('Custom RRR', h('div', { class: 'row-inline' },
         U.toggle('Override', () => st.customOn, (v) => { st.customOn = v; chg(); }),
-        U.num(() => st.customRrr, (n) => { st.customRrr = n; chg(); }, { w: '70px' }))),
+        U.num(() => st.customRrr, (n) => { st.customRrr = n; chg(); }, { w: '70px', ph: '%' }))),
       U.field('Focus points', U.toggle('Use focus', () => st.focus, (v) => { st.focus = v; chg(); })),
       U.field('Production bonus', U.toggle('City specialty', () => st.production, (v) => { st.production = v; chg(); })),
-      U.field('Focus efficiency', U.num(() => C.S.focusEff, (n) => { C.S.focusEff = n || 0; C.saveSettings(); chg(); }, { w: '80px' }),
+      U.field('Focus efficiency', U.num(() => C.S.focusEff, (n) => { C.S.focusEff = n; C.saveSettings(); chg(); }, { w: '80px', ph: '0' }),
         'Total focus-efficiency points from your masteries/specs. Focus cost is halved every 10,000 points. Leave 0 if unsure.'),
       U.field('Premium', U.toggle('Enabled', () => C.S.premium, (v) => { C.S.premium = v; C.saveSettings(); chg(); })),
       U.field('Sell order', U.toggle('Include taxes', () => C.S.sellTaxes, (v) => { C.S.sellTaxes = v; C.saveSettings(); chg(); }),
@@ -65,11 +65,9 @@
   /** how fetched prices are read: buy side & sell side */
   function basisPanel(onChange) {
     const S = C.S;
-    if (!S.buyBasis) S.buyBasis = 'sell';
-    if (!S.sellBasis) S.sellBasis = 'sell';
     return h('div', { class: 'panel-grid' },
-      U.field('Material price basis', U.select([['sell', 'Lowest sell order (buy instantly)'], ['buy', 'Highest buy order (place order)']], () => S.buyBasis, (v) => { S.buyBasis = v; C.saveSettings(); onChange && onChange(); })),
-      U.field('Product price basis', U.select([['sell', 'Lowest sell order (list at)'], ['buy', 'Highest buy order (sell instantly)']], () => S.sellBasis, (v) => { S.sellBasis = v; C.saveSettings(); onChange && onChange(); })),
+      U.field('Material price basis', U.select([['', 'Default: lowest sell order'], ['sell', 'Lowest sell order (buy instantly)'], ['buy', 'Highest buy order (place order)']], () => S.buyBasis, (v) => { S.buyBasis = v; C.saveSettings(); onChange && onChange(); })),
+      U.field('Product price basis', U.select([['', 'Default: lowest sell order'], ['sell', 'Lowest sell order (list at)'], ['buy', 'Highest buy order (sell instantly)']], () => S.sellBasis, (v) => { S.sellBasis = v; C.saveSettings(); onChange && onChange(); })),
     );
   }
 
@@ -83,7 +81,9 @@
       if (ctl) { ctl.abort(); }
       ctl = new AbortController();
       const jobs = build(mode);
-      if (!jobs.length) { U.toast('Nothing to fetch yet – add a recipe first'); return; }
+      if (!jobs.length) { U.toast('Nothing to fetch yet – choose a recipe and cities first'); return; }
+      if (jobs.some((j) => !j.city || !j.quality)) { U.toast('Choose a city (and quality) for every price you want to fetch', 'err'); return; }
+      if (!C.SERVERS[C.S.server]) { U.toast('Select a server first (top right)', 'err'); return; }
       prog.show('Contacting AODP (' + C.SERVERS[C.S.server].label + ')…');
       try {
         const n = await C.fetchBook(jobs, mode, {
@@ -122,6 +122,7 @@
         row.appendChild(h('div', { class: 'gc ' + (col.cls || ''), 'data-l': col.l || '' }, cell));
       });
       root.appendChild(row);
+      if (r.detail) root.appendChild(h('div', { class: 'gdet' }, r.detail));
     });
     if (!rows.length) root.appendChild(h('div', { class: 'gempty' }, o.empty || 'Nothing to show'));
     return root;

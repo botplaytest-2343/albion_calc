@@ -67,17 +67,26 @@
     sel.value = String(get());
     return sel;
   }
+  /** options list with a leading empty choice, so nothing is pre-selected */
+  const blank = (opts, label) => [['', label || 'Select…']].concat(opts.map((x) => (Array.isArray(x) ? x : [x, x])));
   function field(label, control, hint) {
     return h('div', { class: 'fld' }, h('div', { class: 'fl' }, label, hint ? h('span', { class: 'hint', title: hint }, 'ⓘ') : null), control);
   }
   /** multi-select chips. sel is a Set; values can be numbers or strings */
   function chips(options, sel, onchange, o = {}) {
     const wrap = h('div', { class: 'chips ' + (o.cls || '') });
+    const btns = [];
+    const sync = () => btns.forEach(([v, b]) => b.classList.toggle('on', sel.has(v)));
+    if (o.bulk !== false && options.length > 2) {
+      const bulk = (label, fn) => { const b = h('button', { type: 'button', class: 'chip bulk' }, label); b.addEventListener('click', () => { fn(); sync(); onchange && onchange(sel); }); return b; };
+      wrap.appendChild(bulk('All', () => options.forEach((x) => sel.add(Array.isArray(x) ? x[0] : x))));
+      wrap.appendChild(bulk('None', () => sel.clear()));
+    }
     options.forEach((x) => {
       const [v, l, color] = Array.isArray(x) ? x : [x, x];
       const b = h('button', { type: 'button', class: 'chip' + (sel.has(v) ? ' on' : ''), style: color ? { '--c': color } : null }, l);
       b.addEventListener('click', () => { sel.has(v) ? sel.delete(v) : sel.add(v); b.classList.toggle('on', sel.has(v)); onchange && onchange(sel); });
-      wrap.appendChild(b);
+      wrap.appendChild(b); btns.push([v, b]);
     });
     return wrap;
   }
@@ -183,5 +192,5 @@
     return sec;
   }
 
-  window.UI = { h, clear, debounce, parseNum, toggle, num, select, field, chips, btn, icon, itemCell, card, money, profitSpan, priceInput, keepFocus, toast, progress, picker, collapsible };
+  window.UI = { blank, h, clear, debounce, parseNum, toggle, num, select, field, chips, btn, icon, itemCell, card, money, profitSpan, priceInput, keepFocus, toast, progress, picker, collapsible };
 })();

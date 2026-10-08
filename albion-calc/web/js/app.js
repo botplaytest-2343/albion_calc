@@ -9,8 +9,9 @@
   const tabs = document.getElementById('tabs');
   const srv = document.getElementById('server');
 
+  srv.appendChild(h('option', { value: '', selected: !C.S.server }, 'Select server…'));
   Object.keys(C.SERVERS).forEach((k) => srv.appendChild(h('option', { value: k, selected: k === C.S.server }, C.SERVERS[k].label)));
-  srv.addEventListener('change', () => { C.S.server = srv.value; C.saveSettings(); U.toast('Server: ' + C.SERVERS[srv.value].label); });
+  srv.addEventListener('change', () => { C.S.server = srv.value; C.saveSettings(); if (srv.value) U.toast('Server: ' + C.SERVERS[srv.value].label); });
 
   const views = {};
   ORDER.forEach((k) => {
